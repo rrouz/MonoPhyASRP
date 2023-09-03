@@ -2,7 +2,7 @@
 PhyASR: A phyloinformatic pipeline designed to perform ancestral sequence reconstruction upon monophylogenetic trees generated from protein sequences.
 
 ## Dependencies
-Before running the pipeline, ensure you have the following software and dependencies installed:
+Before running the pipeline, ensure you have the following software installed:
 
 - [MAFFT](https://mafft.cbrc.jp/alignment/software/) - Multiple sequence alignment tool.
 - [IQ-TREE](http://www.iqtree.org/) - Phylogenetic tree inference software.
