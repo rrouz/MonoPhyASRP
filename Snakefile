@@ -1,10 +1,10 @@
 #Snakefile for Protein Sequence Reconstruction Pipeline
-rule all:
-    input:
-        "IQ-TREE_output.nwk"
+#rule all:
+#    input:
+#        "IQ-TREE_output.nwk"
 
 #Step 1: Prepare Sequences
-rule replace_underscores_in_headers:
+rule seq_prep:
     input:
         "protein_sequences.fasta"
     output:
@@ -24,7 +24,7 @@ rule replace_underscores_in_headers:
                     sequence += line.strip()
 
 #Step 2: Generate MSA
-rule align_protein_sequences:
+rule msa:
     input:
         "modified_protein_sequences.fasta"
     output: 
@@ -32,7 +32,7 @@ rule align_protein_sequences:
     shell:
         "mafft --auto {input} > {output}"
 
-#Step 2: Phylogenetic Tree Inference w/MrBayes
+#ARTIFACT // Step 2: Phylogenetic Tree Inference w/MrBayes
 #rule run_mrbayes:
 #    input:
 #        "aligned_protein_sequences.fasta"  # Replace with your input file
@@ -42,7 +42,7 @@ rule align_protein_sequences:
 #        "mb {input} > {output}"
 
 
-#Step 2: Phylogenetic Tree Inference w/RAxML
+#ARTIFACT // Step 2: Phylogenetic Tree Inference w/RAxML
 #rule infer_protein_tree:
 #    input:
 #        "aligned_protein_sequences.fasta"
@@ -69,7 +69,7 @@ rule convert_to_nwk:
     shell:
         "mv {input} {output}"
 
-#Step 3: Setup AutoPhy (installation of Autophy)
+#ARTIFACT // Step 3: Setup AutoPhy (installation of Autophy)
 #rule setup_autophy:
 #    input:
 #        "IQ-TREE_output.nwk"
@@ -114,36 +114,139 @@ rename_tree_file(directory)
 EOF
         """
 
-#Step 6: Re-label MSA taxon
-rule autophy_msa:
+rule subtree_extractor:
     input:
-        tree_file="output/autophy_tree.nwk",
-        msa_file="aligned_protein_sequences.fasta"
+        "output/autophy_tree.nwk",
     output:
-        output_msa="autophy_msa.fasta"
+        "subtree_sequences.fasta",
     shell:
         """
-        python scripts/autophy_msa_script.py {input.tree_file} {input.msa_file} {output.output_msa}
+        python scripts/subtree_extractor.py
         """
+
+rule subtree_seq_prep:
+    input:
+        "subtree_sequences.fasta"
+    output:
+       modified="modified_subtree_sequences.fasta"
+    script:
+        "scripts/subtree_seq_prep.py"
+
+rule subtree_msa:
+    input:
+        "modified_subtree_sequences.fasta"
+    output: 
+        "aligned_subtree_sequences.fasta"
+    shell:
+        "mafft --auto {input} > {output}"
+
+#rule subtree_iqtree:
+#    input:
+#        "aligned_subtree_sequences.fasta"
+#    output:
+#        "IQ-TREE_subtree_output.treefile"
+#    shell:
+#        "iqtree -s {input} -m LG+G+F -bb 1000 -nt AUTO -pre IQ-TREE_subtree_output"
+#
+#rule subtree_convert_to_nwk:
+#    input:
+#        "IQ-TREE_subtree_output.treefile"
+#    output:
+#        "IQ-TREE_subtree_output.nwk"
+#    shell:
+#        "mv {input} {output}"
+#
+#rule activate_autophy_subtree:
+#    input:
+#        "IQ-TREE_subtree_output.nwk"
+#    shell:
+#        """
+#        echo "Running Autophy..."
+#        conda run -n autophy /bin/bash -c 'autophy -t IQ-TREE_subtree_output.nwk -id autophy -d monophyletic  -o clustered'
+#        """
+#
+#rule rename_subtree_file:
+#    output:
+#        "output/autophy_subtree.nwk"
+#    shell:
+#        """
+#        python - <<EOF
+#import os
+#
+#def rename_tree_file(directory):
+#    for filename in os.listdir(directory):
+#        if filename.endswith(".tree"):
+#            new_name = "autophy_subtree.nwk"
+#            os.rename(os.path.join(directory, filename), os.path.join(directory, new_name))
+#            break  #Stop after renaming the first .tree file found
+#
+#directory = "output/"
+#
+#rename_tree_file(directory)
+#EOF
+#        """
+
+#Step 6: Re-label MSA taxon
+#rule autophy_msa:
+#    input:
+#        tree_file="output/autophy_tree.nwk",
+#        msa_file="aligned_protein_sequences.fasta"
+#    output:
+#        output_msa="autophy_msa.fasta"
+#    shell:
+#        """
+#        python scripts/autophy_msa_script.py {input.tree_file} {input.msa_file} {output.output_msa}
+#        """
 
 #Step 7: IQ-TREE Ancestral Sequence Reconstruction
-rule iqtree_asr:
-    input:
-        tree_file="output/autophy_tree.nwk",
-        protein_alignment="autophy_msa.fasta"
-    output:
-        "autophy_msa.fasta.state"
-    shell:
-        """
-        iqtree -s {input.protein_alignment} -st AA -nt AUTO -te {input.tree_file} -m MFP+MERGE -asr
-        """
+#rule iqtree_asr:
+#    input:
+#        tree_file="output/autophy_tree.nwk",
+#        protein_alignment="autophy_msa.fasta"
+#    output:
+#        "autophy_msa.fasta.state"
+#    shell:
+#        """
+#        iqtree -s {input.protein_alignment} -st AA -nt AUTO -te {input.tree_file} -m MFP+MERGE -asr
+#        """
 
+#Step 8: Re-format Ancestral Sequences Into Fasta
+#rule anc_fasta:
+#    input:
+#        tsv_file="autophy_msa.fasta.state"
+#    output:
+#        fasta_file="ancestral_node_sequences.fasta"
+#    shell:
+#        "python scripts/tsv_fasta.py {input.tsv_file} {output.fasta_file}"
 
+#ARTIFACT // Sequence Combination and MSA   
+#rule anc_msa:
+#    input:
+#        ancestral_fasta="ancestral_node_sequences.fasta",
+#        protein_fasta="modified_protein_sequences.fasta"
+#    output:
+#        combined_fasta="combined_sequences.fasta"
+#    params:
+#        mafft_output="combined_msa.fasta"
+#    shell:
+#        """
+#        cat {input.ancestral_fasta} {input.protein_fasta} > {output.combined_fasta}
+#        mafft {output.combined_fasta} > {params.mafft_output}
+#        """
 
-#Step 4: Ancestral Reconstruction w/ARPIP
+#ARTIFACT // rule anc_iqtree:
+#    input:
+#        "combined_msa.fasta"
+#    output:
+#        "IQ-TREE_anc.treefile"
+#    shell:
+#        "iqtree -s {input} -m LG+G+F -bb 1000 -nt AUTO -pre IQ-TREE_anc"
+
+#ARTIFACT // Step 4: Ancestral Reconstruction w/ARPIP
 #include link to how to install ARPIP
 #rule arpip:
 #    shell:
 #        """
 #        ./../bpp-arpip/ARPIP params="conf.txt"
 #        """
+
